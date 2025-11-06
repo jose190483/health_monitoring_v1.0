@@ -1,0 +1,14 @@
+{% extends 'portal_base.html' %}
+{% block content %}
+<h2>Upload XML File</h2>
+{% if messages %}
+<ul>
+  {% for m in messages %}<li style="color:green">{{ m }}</li>{% endfor %}
+</ul>
+{% endif %}
+<form method="post" enctype="multipart/form-data">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit" style="background:#0ea5a8;color:#fff;padding:8px 12px;border:0;border-radius:6px;cursor:pointer">Upload</button>
+</form>
+{% endblock %}

@@ -1,0 +1,147 @@
+{% extends 'portal_base.html' %}
+{% block content %}
+<h2>Server Metrics Dashboard</h2>
+
+<div style="margin-bottom:20px;">
+  <label for="serverSelect">Select Server:</label>
+  <select id="serverSelect" style="padding:5px;">
+    <option value="">-- Choose a server --</option>
+    {% for h in hostnames %}
+      <option value="{{ h }}">{{ h }}</option>
+    {% endfor %}
+  </select>
+</div>
+
+<div id="chartsArea" style="display:none;">
+  <div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(300px,1fr)); gap:20px;">
+    <canvas id="cpuChart"></canvas>
+    <canvas id="ramChart"></canvas>
+    <canvas id="diskChart"></canvas>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const cpuCtx = document.getElementById('cpuChart');
+const ramCtx = document.getElementById('ramChart');
+const diskCtx = document.getElementById('diskChart');
+let cpuChart, ramChart, diskChart;
+
+document.getElementById('serverSelect').addEventListener('change', function() {
+    const server = this.value;
+    if (!server) return;
+    fetch(`/app/metrics/data/?server=${encodeURIComponent(server)}`)
+      .then(r => r.json())
+      .then(data => {
+        document.getElementById('chartsArea').style.display = 'block';
+        renderCharts(data);
+      });
+});
+
+function renderCharts(data) {
+  const info = data.server_info;
+  const serverInfoText = `Server: ${info.hostname || ''}\n IP: ${info.ip || ''}\n BU: ${info.business_unit || ''}`;
+
+  if (cpuChart) cpuChart.destroy();
+  if (ramChart) ramChart.destroy();
+  if (diskChart) diskChart.destroy();
+
+  cpuChart = new Chart(cpuCtx, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: 'CPU (%)',
+        data: data.cpu,
+        borderColor: 'rgb(54, 162, 235)',
+        tension: 0.3
+      }]
+    },
+    options: {
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return [
+                `⚙️ CPU: ${context.formattedValue}%`,
+                `🖥️ ${serverInfoText}`
+              ];
+            }
+          }
+        },
+        legend: { display: false }
+      },
+      scales: { y: { beginAtZero: true } },
+      maintainAspectRatio: false
+    }
+  });
+
+  ramChart = new Chart(ramCtx, {
+    type: 'line',
+    data: {
+      labels: data.labels,
+      datasets: [{
+        label: 'RAM (%)',
+        data: data.ram,
+        borderColor: 'rgb(255, 99, 132)',
+        tension: 0.3
+      }]
+    },
+    options: {
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              return [
+                `🧠 RAM: ${context.formattedValue} %`,
+                `🖥️ ${serverInfoText}`
+              ];
+            }
+          }
+        },
+        legend: { display: false }
+      },
+      scales: { y: { beginAtZero: true } },
+      maintainAspectRatio: false
+    }
+  });
+
+ diskChart = new Chart(diskCtx, {
+    type: 'doughnut',
+    data: {
+      labels: data.disk_labels,
+      datasets: [{
+        label: 'Disk Usage (%)',
+        data: data.disk_values,
+        backgroundColor: [
+          'rgba(75, 192, 192, 0.6)',
+          'rgba(255, 205, 86, 0.6)',
+          'rgba(255, 99, 132, 0.6)',
+          'rgb(54, 162, 235, 0.6)',
+          'rgb(153, 102, 255, 0.6)',
+         ],
+        borderWidth: 1
+      }]
+    },
+    options: {
+      plugins: {
+        tooltip: {
+          callbacks: {
+            label: function(context) {
+              const label = context.label || '';
+              const value = context.formattedValue || '';
+              return [
+                `⚙️ ${label}: ${value} %`,
+                `🖥️ ${serverInfoText}`
+              ];
+            }
+          }
+        },
+        legend: { position: 'bottom' }
+      },
+      maintainAspectRatio: false
+    }
+  });
+}
+</script>
+{% endblock %}

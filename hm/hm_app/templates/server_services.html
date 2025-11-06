@@ -1,0 +1,40 @@
+{% extends 'portal_base.html' %}
+{% block content %}
+<h2>Services — {{ hostname }}</h2>
+<a href="{% url 'dashboard_view' %}" class="back-btn">Back to Dashboard</a>
+{% if services %}
+<table style="width:100%;border-collapse:collapse;text-align:left;">
+<thead>
+<tr><th>Service</th><th>Status</th>
+<!--  <th>Source File</th><th>Uploaded</th>-->
+</tr>
+</thead>
+<tbody>
+{% for svc in services %}
+<tr>
+  <td>
+    <a href="{% url 'service_details' hostname=hostname|urlencode service_name=svc.service_name %}">
+      {{ svc.service_name }}
+    </a>
+  </td>
+  <td>{{ svc.status }}</td>
+<!--  <td>{{ svc.source_file }}</td>-->
+<!--  <td>{{ svc.uploaded_at }}</td>-->
+</tr>
+{% endfor %}
+</tbody>
+</table>
+<script>
+  // auto-refresh every 30 seconds
+  setInterval(() => location.reload(), 30000);
+</script>
+{% else %}
+<script>
+  // auto-refresh every 30 seconds
+  setInterval(() => location.reload(), 30000);
+</script>
+<p>No services found for {{ hostname }}.</p>
+{% endif %}
+{% endblock %}
+
+

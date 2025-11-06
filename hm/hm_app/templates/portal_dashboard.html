@@ -1,0 +1,147 @@
+{% extends 'portal_base.html' %}
+{% block content %}
+
+<div style="display:flex;align-items:center;">
+  <h2>Dashboard - {% if business_unit != 'Admin' %}{{ business_unit }}{% endif %}</h2>
+
+  {% if business_unit == 'Admin' %}
+  <form method="get" id="unit-filter-form" style="margin: 1.4% 1% 1% 1%">
+    <select name="unit" id="unit" onchange="document.getElementById('unit-filter-form').submit();"
+            style="padding:5px 8px;border-radius:6px;font-size:16px;font-weight:790">
+      <option value="All" {% if selected_unit == 'All' %}selected{% endif %}>All</option>
+      <option value="TPS" {% if selected_unit == 'TPS' %}selected{% endif %}>TPS</option>
+      <option value="OFS" {% if selected_unit == 'OFS' %}selected{% endif %}>OFS</option>
+      <option value="OFE" {% if selected_unit == 'OFE' %}selected{% endif %}>OFE</option>
+      <option value="Admin" {% if selected_unit == 'Admin' %}selected{% endif %}>Admin</option>
+    </select>
+  </form>
+
+  <h2>Unit</h2>
+
+  {% endif %}
+</div>
+{% if messages %}
+<h3 style="color:green;text-align:center;">
+  {% for m in messages %}
+    {{ m }}
+  {% endfor %}
+</h3>
+{% endif %}
+{% if servers %}
+<table style="width:100%;border-collapse:collapse;margin-top:15px;">
+<thead>
+<tr>
+<!--  <th>File</th><th>Uploaded</th>-->
+  <th>Hostname</th><th>IP</th><th>Status</th>
+  <th>CPU</th><th>RAM</th><th>Disks</th><th>Latency</th><th>Last Boot</th><th>Ticket Raising</th>
+</tr>
+</thead>
+<tbody>
+{% for s in servers %}
+<tr style="border-bottom:1px solid #e5e7eb">
+<!--  <td>{{ s.source_file }}</td>-->
+<!--  <td>{{ s.uploaded_at }}</td>-->
+  <td><a href="{% url 'server_services' hostname=s.hostname|urlencode %}">
+    {{ s.hostname }}
+  </a></td>
+  <td>{{ s.ip }}</td>
+  <td>{{ s.status }}</td>
+  <td>
+    <div class="bar-container">
+      <div class="bar {{ s.cpu_color }}" style="width:{{ s.cpu|default:'0'|cut:'%' }}%">
+        {{ s.cpu }}
+      </div>
+    </div>
+  </td>
+  <td>
+    <div class="bar-container">
+      <div class="bar {{ s.ram_color }}" style="width:{{ s.ram|default:'0'|cut:'%' }}%">
+        {{ s.ram }}
+      </div>
+    </div>
+  </td>
+  <td>
+    {% for d in s.disks %}
+    <div style="margin-bottom:6px">
+      <strong>{{ d.drive }}</strong>
+      <div class="bar-container">
+        <div class="bar {{ d.color }}" style="width:{{ d.usage|default:'0'|cut:'%' }}%">
+          {{ d.usage }}
+        </div>
+      </div>
+    </div>
+    {% endfor %}
+  </td>
+  <td>{{ s.network_latency }}</td>
+  <td>{{ s.last_boot }}</td>
+  <td>
+    <form method="post" action="{% url 'check_threshold' server_name=s.hostname %}">
+      {% csrf_token %}
+      <button type="submit" style="background-color:#f39c12;color:red;border:none;padding:5px 10px;border-radius:5px;">
+        Check Threshold
+      </button>
+    </form>
+<!--    <button-->
+<!--            type="button"-->
+<!--            onclick="CheckThreshold('{{ s.hostname }}')"-->
+<!--            style="background-color:#f39c12;color:red;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;position:relative;z-index:10;">-->
+<!--        Check Threshold-->
+<!--    </button>-->
+  </td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+<!--<script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>-->
+<!--<script>-->
+<!--function CheckThreshold(serverName) {-->
+<!--  fetch(`/app/check_threshold/${encodeURIComponent(serverName)}/`)-->
+<!--    .then(response => response.json())-->
+<!--    .then(data => {-->
+<!--      if (data.status === 'exceeded') {-->
+<!--        Swal.fire({-->
+<!--          icon: 'warning',-->
+<!--          title: 'Threshold Alert!',-->
+<!--          html: `<b>${serverName}</b><br><br>${data.message}<br><br>📄 Ticket created successfully.`,-->
+<!--          confirmButtonColor: '#f39c12'-->
+<!--        });-->
+<!--      } else if (data.status === 'normal') {-->
+<!--        Swal.fire({-->
+<!--          icon: 'success',-->
+<!--          title: 'All Good!',-->
+<!--          text: `${data.message}`,-->
+<!--          confirmButtonColor: '#28a745'-->
+<!--        });-->
+<!--      } else {-->
+<!--        Swal.fire({-->
+<!--          icon: 'error',-->
+<!--          title: 'Error!',-->
+<!--          text: data.message-->
+<!--        });-->
+<!--      }-->
+<!--    })-->
+<!--    .catch(err => {-->
+<!--      Swal.fire({-->
+<!--        icon: 'error',-->
+<!--        title: 'Oops!',-->
+<!--        text: 'Something went wrong while checking threshold.'-->
+<!--      });-->
+<!--    });-->
+<!--}-->
+<!--</script>-->
+
+
+<script>
+  // auto-refresh every 30 seconds
+  setInterval(() => location.reload(), 30000);
+</script>
+{% else %}
+<script>
+  // auto-refresh every 30 seconds
+  setInterval(() => location.reload(), 30000);
+</script>
+<p>No data found for this unit.</p>
+{% endif %}
+{% endblock %}
+
+

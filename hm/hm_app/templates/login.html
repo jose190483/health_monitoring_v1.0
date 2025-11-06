@@ -1,0 +1,32 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+<title>Login | Server Portal</title>
+<style>
+  body{font-family:Arial;background:#eef2f7;display:flex;justify-content:center;align-items:center;height:100vh}
+  .form-box{background:white;padding:30px;border-radius:12px;width:350px;box-shadow:0 8px 20px rgba(0,0,0,.1)}
+  h2{text-align:center;color:#0ea5a8;margin-bottom:20px}
+  input,select{width:100%;padding:8px;margin:8px 0;border:1px solid #ccc;border-radius:6px}
+  button{background:#0ea5a8;color:white;border:none;padding:10px;width:100%;border-radius:6px;cursor:pointer}
+  button:hover{background:#0c8c8e}
+</style>
+</head>
+<body>
+<div class="form-box">
+  <h2>Login</h2>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Login</button>
+  </form>
+<!--  {% for message in messages %}-->
+<!--      <p class="msg">{{ message }}</p>-->
+<!--  {% endfor %}-->
+  <p style="text-align:center;margin-top:10px">No account? <a href="{% url 'register' %}">Register</a></p>
+</div>
+</body>
+</html>
+
+
+

@@ -1,0 +1,99 @@
+{% extends "portal_base.html" %}
+{% block content %}
+<h2>Metrics Charts</h2>
+
+<div style="margin-bottom:12px;">
+  <label for="hostname">Host (leave blank = all):</label>
+  <input id="hostname" type="text" placeholder="Server 1" />
+  <button id="btnRefresh">Refresh</button>
+</div>
+
+<!-- KPI row -->
+<div style="display:flex;gap:16px;margin-bottom:18px;">
+  <div style="padding:12px;border:1px solid #eee;border-radius:6px;">
+    <div style="font-size:12px;color:#666">Latest CPU (%)</div>
+    <div id="kpi-cpu" style="font-size:20px;font-weight:600">-</div>
+  </div>
+  <div style="padding:12px;border:1px solid #eee;border-radius:6px;">
+    <div style="font-size:12px;color:#666">Latest RAM (%)</div>
+    <div id="kpi-ram" style="font-size:20px;font-weight:600">-</div>
+  </div>
+</div>
+
+<!-- Charts -->
+<canvas id="cpuChart" height="120"></canvas>
+<canvas id="ramChart" height="120" style="margin-top:18px;"></canvas>
+
+<h3 style="margin-top:22px;">Disk usage (latest)</h3>
+<canvas id="diskChart" width="400" height="200"></canvas>
+
+<!-- Chart.js CDN -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<script>
+const cpuCtx = document.getElementById('cpuChart').getContext('2d');
+const ramCtx = document.getElementById('ramChart').getContext('2d');
+const diskCtx = document.getElementById('diskChart').getContext('2d');
+
+let cpuChart = new Chart(cpuCtx, {
+  type: 'line',
+  data: { labels: [], datasets: [{ label: 'CPU %', data: [], fill: false, tension: 0.2 }] },
+  options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+});
+
+let ramChart = new Chart(ramCtx, {
+  type: 'line',
+  data: { labels: [], datasets: [{ label: 'RAM %', data: [], fill: true, tension: 0.2 }] },
+  options: { responsive: true, scales: { y: { beginAtZero: true, max: 100 } } }
+});
+
+let diskChart = new Chart(diskCtx, {
+  type: 'doughnut',
+  data: { labels: [], datasets: [{ label: 'Disk used %', data: [] }] },
+  options: { responsive: true }
+});
+
+async function loadMetrics() {
+  const hostname = document.getElementById('hostname').value.trim();
+  const params = new URLSearchParams();
+  if (hostname) params.set('hostname', hostname);
+  params.set('limit', '20');
+
+  const resp = await fetch("{% url 'metrics_data_api' %}?" + params.toString());
+  const json = await resp.json();
+
+  // update cpu chart
+  cpuChart.data.labels = json.labels;
+  cpuChart.data.datasets[0].data = json.cpu;
+  cpuChart.update();
+
+  // update ram chart
+  ramChart.data.labels = json.labels;
+  ramChart.data.datasets[0].data = json.ram;
+  ramChart.update();
+
+  // KPI
+  const latestCpu = (json.cpu && json.cpu.length) ? json.cpu[json.cpu.length - 1] : null;
+  const latestRam = (json.ram && json.ram.length) ? json.ram[json.ram.length - 1] : null;
+  document.getElementById('kpi-cpu').innerText = (latestCpu !== null ? latestCpu + '%' : '-');
+  document.getElementById('kpi-ram').innerText = (latestRam !== null ? latestRam + '%' : '-');
+
+  // disk
+  const disks = json.disks || {};
+  diskChart.data.labels = Object.keys(disks);
+  diskChart.data.datasets[0].data = Object.values(disks);
+  diskChart.update();
+}
+
+document.getElementById('btnRefresh').addEventListener('click', loadMetrics);
+
+// load at start
+loadMetrics();
+</script>
+
+{% endblock %}
+
+
+
+
+
+

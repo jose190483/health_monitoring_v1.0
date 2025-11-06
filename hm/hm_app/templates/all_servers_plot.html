@@ -1,0 +1,48 @@
+{% extends 'portal_base.html' %}
+{% block content %}
+<h2>All Server Metrics Overview</h2>
+<form id = "dateForm" method="get" style="margin-bottom:20px;">
+    <label for="start_date">Select Start Date: </label>
+    <input type="date" id="start_date" name="start_date" value="{{ start_date }}">
+    <label for="end_date">Select End Date: </label>
+    <input type="date" id="end_date" name="end_date" value="{{ end_date }}">
+    <select id="metric" name="metric" style="padding:5px 15px 5px 5px; margin:0px 10px 0px 15px;">
+        {% for values in selectionTab %}
+            <option value="{{ values }}" {% if metric == values %}selected{% endif %}>{{ values }}</option>
+        {% endfor %}
+    </select>
+    {% if request.user.business_unit == "Admin" %}
+        <select name="bu" style="padding:5px 15px 5px 5px; margin:0px 15px 0px 5px;">
+            <option value="ALL">ALL</option>
+            <option value="TPS">TPS</option>
+            <option value="OFS">OFS</option>
+            <option value="OFE">OFE</option>
+        </select>
+    {% endif %}
+    <button type="submit">Filter</button>
+</form>
+
+
+{% if message %}
+<h3 style="color:red;font-weight:bold;">{{ message }}</h3>
+{% endif %}
+{% if plot_image %}
+    {% if request.user.business_unit == "Admin" %}
+        <h1 style="text-align:center; color:blue">{{ selectedBU }} Business Unit</h1>
+    {% endif %}
+<div style="text-align:center;">
+    <img src="data:image/png;base64,{{ plot_image }}"
+         alt="Server Metrics"
+         style="max-width:90%; border:1px solid #ccc; border-radius:10px; box-shadow:0 3px 8px rgba(0,0,0,0.1);">
+    <p style="color:gray; font-size:0.9em; margin-top:10px;">
+        Last updated: {{ last_updated }}
+    </p>
+</div>
+{% elif not message %}
+<h4 style="color:gray;">Select a date to view charts</h4>
+{% endif %}
+<script>
+  // optional auto-refresh every 30s
+  setInterval(() => { location.reload(); }, 30000);
+</script>
+{% endblock %}

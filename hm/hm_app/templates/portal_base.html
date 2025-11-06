@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Server Metrics Portal</title>
+  <h3 class="msg">Welcome {{ name }} - {{ business_unit }}</h3>
+  <style>
+    body{margin:0;font-family:Inter,Segoe UI,Arial;background:#f4f7fb;color:#0f172a}
+    .msg{margin-bottom:0;margin-left:2%;color:#000000;font-weight:600;}
+    .container{display:grid;grid-template-columns:240px 1fr;min-height:100vh;gap:24px;padding:24px}
+    .sidebar{background:#fff;padding:20px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.05)}
+    .nav a{display:block;padding:10px 12px;border-radius:6px;margin-bottom:8px;text-decoration:none;color:#111;font-weight:600}
+    .nav a.active{background:#0ea5a8;color:#fff}
+    .content{background:#fff;padding:20px;border-radius:12px;box-shadow:0 4px 12px rgba(0,0,0,.05);overflow:auto}
+    .bar-container{background:#e2e8f0;border-radius:6px;height:18px;overflow:hidden;width:120px}
+    .bar{height:100%;text-align:right;padding-right:5px;font-size:12px;color:white;line-height:18px}
+    .green{background:#10b981}.yellow{background:#f59e0b}.red{background:#ef4444}
+    .back-btn{display:inline-block; margin-bottom:15px;padding:8px 16px;background-color:#007bff;color:white;border-radius:6px;text-decoration:none;font-size:14px;transition: background 0.2s ease-in-out;}
+    .back-btn:hover{background-color:#0056b3;}
+    .textcenterfortable{text-align:left;}
+}
+
+  </style>
+</head>
+<body>
+<div class="container">
+  <aside class="sidebar">
+    <div style="font-weight:700;color:#0ea5a8;font-size:20px;margin-bottom:10px">Server Metrics</div>
+    <nav class="nav">
+      <a href="{% url 'upload_view' %}" class="{% if '/app/upload' in request.path %}active{% endif %}">Upload XML</a>
+      <a href="{% url 'dashboard_view' %}" class="{% if '/app/dashboard' in request.path %}active{% endif %}">Dashboard</a>
+      <a href="{% url 'application_list' %}" class="{% if '/app/application' in request.path %}active{% endif %}">Application</a>
+<!--      <a href="{% url 'metrics_page' %}">Metrics Charts</a>-->
+      <a href="{% url 'metrics_dashboard' %}">Metrics Option</a>
+      <a href="{% url 'all_servers_plot' %}">Server Chart</a>
+      <a href="{% url 'logout' %}" style="margin-top:20px;color:#ef4444;font-weight:600;">Logout</a>
+
+    </nav>
+  </aside>
+  <main class="content">
+    {% block content %}{% endblock %}
+  </main>
+</div>
+</body>
+</html>

@@ -1,0 +1,23 @@
+<ServerMetrics>
+<Server IP="11.22.33.44" Status="Up" Hostname="Server1">
+<CPU>8.75%</CPU>
+<RAM>31.49%</RAM>
+<Disks>
+<Disk Drive="C: ">64.38%</Disk>
+<Disk Drive="D: ">80.14%</Disk>
+</Disks>
+<Network_Latency>0.001 sec</Network_Latency>
+<Last_Boot_Time>Last Boot: 09/11/2025 10:06:31</Last_Boot_Time>
+<LatestEvent Time="09/25/2025 10:32:56 09/25/2025 10:32:51 09/25/2025 10:32:09" ID="7036 7036 7036" Level="Information Information Information">The The The</LatestEvent> </Server>
+<Server IP="11.22.33.45" Status="Up" Hostname="Server2">
+<CPU>1.5%</CPU>
+<RAM>60.26%</RAM>
+<Disks>
+<Disk Drive="C: ">52.98%</Disk>
+<Disk Drive="D: ">57.39%</Disk>
+</Disks>
+<Network_Latency>0 sec</Network_Latency>
+<Last_Boot_Time>Last Boot: 09/11/2025 11:06:45</Last_Boot_Time>
+<LatestEvent Time="09/25/2025 10:51:09 09/25/2025 10:44:43 09/25/2025 10:42:12" ID="40970 7036 7036" Level="Information Information Information">Why Why Why</LatestEvent> 
+</Server>
+</ServerMetrics>

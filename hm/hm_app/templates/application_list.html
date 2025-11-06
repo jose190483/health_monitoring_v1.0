@@ -1,0 +1,42 @@
+{% extends 'portal_base.html' %}
+{% block content %}
+<h2>Application Metrics</h2>
+
+{% if applications %}
+<table style="width:100%;border-collapse:collapse;text-align:left;">
+<thead>
+<tr>
+  <th>Name</th>
+  <th>Accessible</th>
+  <th>Response Time (ms)</th>
+  <th>Service Status</th>
+</tr>
+</thead>
+<tbody>
+{% for app in applications %}
+<tr>
+  <td>
+    <a href="{% url 'application_detail' app_name=app.name %}">
+      {{ app.name }}
+    </a>
+  </td>
+  <td>{{ app.accessible }}</td>
+  <td>{{ app.response_time }}</td>
+  <td>{{ app.service_status }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+<script>
+  // auto-refresh every 30 seconds
+  setInterval(() => location.reload(), 30000);
+</script>
+{% else %}
+<script>
+  // auto-refresh every 30 seconds
+  setInterval(() => location.reload(), 30000);
+</script>
+<p>No applications found.</p>
+{% endif %}
+{% endblock %}
+

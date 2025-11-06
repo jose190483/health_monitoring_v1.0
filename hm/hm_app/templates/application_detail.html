@@ -1,0 +1,38 @@
+{% extends 'portal_base.html' %}
+{% block content %}
+<h2>Application: {{ app_name }}</h2>
+<a href="{% url 'application_list' %}" class="back-btn">Back to Application Metrics</a>
+{% if servers %}
+<table style="width:100%;border-collapse:collapse;text-align:left;">
+<thead>
+<tr>
+  <th>Server Type</th>
+  <th>Server Name</th>
+  <th>Status</th>
+</tr>
+</thead>
+<tbody>
+{% for s in servers %}
+<tr>
+  <td>{{ s.type }}</td>
+  <td>{{ s.name }}</td>
+  <td>{{ s.status }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+<script>
+  // auto-refresh every 30 seconds
+  setInterval(() => location.reload(), 30000);
+</script>
+{% else %}
+<script>
+  // auto-refresh every 30 seconds
+  setInterval(() => location.reload(), 30000);
+</script>
+<p>No server details found for this application.</p>
+{% endif %}
+{% endblock %}
+
+
+

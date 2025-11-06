@@ -1,0 +1,43 @@
+{% extends 'portal_base.html' %}
+{% block content %}
+<h2>Components — {{ hostname }} / {{ service_name }}</h2>
+<a href="{% url 'server_services' hostname=hostname %}" class="back-btn">Back to {{ hostname }}</a>
+{% if components %}
+<table style="width:100%;border-collapse:collapse;text-align:left;">
+  <thead>
+    <tr>
+      <th>Component</th>
+      <th>Status</th>
+      <th>URL</th>
+      <th>Log File</th>
+      <th>Actual Service</th>
+<!--      <th>Source File</th>-->
+<!--      <th>Uploaded</th>-->
+    </tr>
+  </thead>
+  <tbody>
+  {% for c in components %}
+    <tr>
+      <td>{{ c.component_name }}</td>
+      <td>{{ c.status }}</td>
+      <td>{% if c.url %}<a href="{{ c.url }}" target="_blank">{{ c.url }}</a>{% endif %}</td>
+      <td>{% if c.logfile %}<a href="{{ c.logfile }}" target="_blank">{{ c.logfile }}</a>{% endif %}</td>
+      <td>{{ c.actual_service }}</td>
+<!--      <td>{{ c.source_file }}</td>-->
+<!--      <td>{{ c.uploaded_at }}</td>-->
+    </tr>
+  {% endfor %}
+  </tbody>
+</table>
+<script>
+  // auto-refresh every 30 seconds
+  setInterval(() => location.reload(), 30000);
+</script>
+{% else %}
+<script>
+  // auto-refresh every 30 seconds
+  setInterval(() => location.reload(), 30000);
+</script>
+<p>No component details found for this service.</p>
+{% endif %}
+{% endblock %}
