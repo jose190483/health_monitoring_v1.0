@@ -1,6 +1,7 @@
 from django.db import models
 from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin
 from django.conf import settings
+from django.utils import timezone
 
 BUSINESS_UNITS = [
     ('TPS', 'TPS'),
@@ -43,35 +44,103 @@ class CustomUser(AbstractBaseUser, PermissionsMixin):
     def __str__(self):
         return f"{self.email} ({self.business_unit})"
 
-# Create your models here.
-class XMLData(models.Model):
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, null=True, blank=True)
-    business_unit = models.CharField(max_length=20, null=True, blank=True)
+# ---------- SERVER ----------
+class ServerMetricsHistory(models.Model):
     file_name = models.CharField(max_length=255)
-    data = models.JSONField()
-    created_at = models.DateTimeField(auto_now_add=True)
-
-    def __str__(self):
-        return self.file_name
-
-
-class ServiceComponentData(models.Model):
-    file_name = models.CharField(max_length=255)
-    data = models.JSONField()
-    business_unit = models.CharField(max_length=20, null=True, blank=True)
-    created_at = models.DateTimeField(auto_now_add=True)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL,
-                             null=True, blank=True, help_text="User who uploaded (if any)")
-
-    def __str__(self):
-        return f"{self.file_name} ({self.business_unit})"
-
-
-class ApplicationData(models.Model):
-    file_name = models.CharField(max_length=255)
+    hostname = models.CharField(max_length=255)
     data = models.JSONField()
     business_unit = models.CharField(max_length=50)
-    created_at = models.DateTimeField(auto_now_add=True)
+    created_at = models.DateTimeField(default=timezone.now)
 
     def __str__(self):
-        return self.file_name
+        return f"{self.hostname} ({self.business_unit}) @ {self.created_at:%Y-%m-%d %H:%M:%S}"
+
+class ServerMetricsLive(models.Model):
+    hostname = models.CharField(max_length=255, unique=True)
+    business_unit = models.CharField(max_length=50)
+    data = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.hostname} ({self.business_unit})"
+
+
+class ServiceMetricsHistory(models.Model):
+    file_name = models.CharField(max_length=255)
+    hostname = models.CharField(max_length=255)
+    data = models.JSONField()
+    business_unit = models.CharField(max_length=50)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.hostname} ({self.business_unit}) @ {self.created_at:%Y-%m-%d %H:%M:%S}"
+
+class ServiceMetricsLive(models.Model):
+    hostname = models.CharField(max_length=255, unique=True)
+    business_unit = models.CharField(max_length=50)
+    data = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.hostname} ({self.business_unit})"
+
+
+# ---------- SERVICE COMPONENT DETAILS----------
+class ServiceComponentHistory(models.Model):
+    file_name = models.CharField(max_length=255)
+    hostname = models.CharField(max_length=255, blank=True, null=True)
+    data = models.JSONField()
+    business_unit = models.CharField(max_length=50)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.hostname or self.file_name} ({self.business_unit})"
+
+class ServiceComponentLive(models.Model):
+    hostname = models.CharField(max_length=255, unique=True)
+    business_unit = models.CharField(max_length=50)
+    data = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.hostname} ({self.business_unit})"
+
+
+# ---------- APPLICATION METRICS ----------
+class ApplicationDashboardHistory(models.Model):
+    file_name = models.CharField(max_length=255)
+    app_name = models.CharField(max_length=255)
+    data = models.JSONField()
+    business_unit = models.CharField(max_length=50)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.app_name} ({self.business_unit}) @ {self.created_at:%Y-%m-%d %H:%M:%S}"
+
+class ApplicationDashboardLive(models.Model):
+    app_name = models.CharField(max_length=255, unique=True)
+    business_unit = models.CharField(max_length=50)
+    data = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.app_name} ({self.business_unit})"
+
+class ApplicationListHistory(models.Model):
+    file_name = models.CharField(max_length=255)
+    app_name = models.CharField(max_length=255)
+    data = models.JSONField()
+    business_unit = models.CharField(max_length=50)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self):
+        return f"{self.app_name} ({self.business_unit}) @ {self.created_at:%Y-%m-%d %H:%M:%S}"
+
+class ApplicationListLive(models.Model):
+    app_name = models.CharField(max_length=255, unique=True)
+    business_unit = models.CharField(max_length=50)
+    data = models.JSONField()
+    updated_at = models.DateTimeField(auto_now=True)
+
+    def __str__(self):
+        return f"{self.app_name} ({self.business_unit})"

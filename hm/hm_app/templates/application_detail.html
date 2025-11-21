@@ -1,7 +1,7 @@
 {% extends 'portal_base.html' %}
 {% block content %}
 <h2>Application: {{ app_name }}</h2>
-<a href="{% url 'application_list' %}" class="back-btn">Back to Application Metrics</a>
+<a href="{% url 'application_dashboard' %}" class="back-btn">Back to Application Metrics</a>
 {% if servers %}
 <table style="width:100%;border-collapse:collapse;text-align:left;">
 <thead>

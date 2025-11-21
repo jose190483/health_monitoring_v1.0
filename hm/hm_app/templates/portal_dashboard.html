@@ -1,6 +1,13 @@
 {% extends 'portal_base.html' %}
 {% block content %}
+<style>
+  .header_style{
+  text-align: center;
+  }
 
+  .body_style{
+
+</style>
 <div style="display:flex;align-items:center;">
   <h2>Dashboard - {% if business_unit != 'Admin' %}{{ business_unit }}{% endif %}</h2>
 
@@ -30,10 +37,10 @@
 {% if servers %}
 <table style="width:100%;border-collapse:collapse;margin-top:15px;">
 <thead>
-<tr>
+<tr class="header_style">
 <!--  <th>File</th><th>Uploaded</th>-->
   <th>Hostname</th><th>IP</th><th>Status</th>
-  <th>CPU</th><th>RAM</th><th>Disks</th><th>Latency</th><th>Last Boot</th><th>Ticket Raising</th>
+  <th>CPU</th><th>RAM</th><th>Disks</th><th>Latency</th><th>Last Boot</th><th>Ticket Raising</th><th>Top Contributor</th>
 </tr>
 </thead>
 <tbody>
@@ -77,7 +84,7 @@
   <td>
     <form method="post" action="{% url 'check_threshold' server_name=s.hostname %}">
       {% csrf_token %}
-      <button type="submit" style="background-color:#f39c12;color:red;border:none;padding:5px 10px;border-radius:5px;">
+      <button type="submit" style="background-color:whitesmoke;color:red;border:none;padding:5px 10px;border-radius:5px;" class="threshold_button">
         Check Threshold
       </button>
     </form>
@@ -87,6 +94,30 @@
 <!--            style="background-color:#f39c12;color:red;border:none;padding:5px 10px;border-radius:5px;cursor:pointer;position:relative;z-index:10;">-->
 <!--        Check Threshold-->
 <!--    </button>-->
+  </td>
+  <td>
+<!--    <a href="{{ outlook_link }}" target="_blank">-->
+<!--      <button style="background-color:whitesmoke;color:red;border:none;padding:5px 10px;border-radius:5px;">-->
+<!--        Send Email-->
+<!--      </button>-->
+<!--    </a>-->
+<!--<button onclick="sendEmail()" class="btn btn-warning">-->
+<!--    Send Ticket Email-->
+<!--</button>-->
+<!--<a href="https://mail.tcs.com/owa/?ae=Item&a=New&t=IPM.Note&to=sanjay.vedhachalam@tcs.com&subject=Server%20Alert&body=CPU%20Limit%20Exceeded">-->
+<!--    Send Email-->
+<!--</a>-->
+
+<!--    <a href="mailto:abc@tcs.com?subject=Server%20Alert&body=CPU%20Exceeded">Send Email</a>-->
+<!--    <a href="{{ mailto_link }}" class="btn btn-primary" target="_blank">-->
+<!--      Send Threshold Alert-->
+<!--    </a>-->
+{% for top in s.top_memory_processes %}
+    <div>
+      <strong>{{ top.process_name }} - </strong>
+      <strong>{{ top.process_used }}</strong>
+    </div>
+{% endfor %}
   </td>
 </tr>
 {% endfor %}
@@ -129,6 +160,17 @@
 <!--    });-->
 <!--}-->
 <!--</script>-->
+<script>
+function sendEmail() {
+    const to = "a.56@tcs.com";
+    const subject = encodeURIComponent("Threshold Alert!");
+    const body = encodeURIComponent("Threshold exceeded - please review.");
+
+    const link = `https://mail.tcs.com/owa/#path=/mail/compose?to=${to}&subject=${subject}&body=${body}`;
+
+    window.open(link, "_blank");  // always opens new tab
+}
+</script>
 
 
 <script>

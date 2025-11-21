@@ -2,12 +2,14 @@ import os, tempfile, logging, re
 from datetime import timedelta, datetime
 import io
 import base64
+from typing import Any
+
 import matplotlib
 from django.conf import settings
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-from django.http import JsonResponse
+from django.http import JsonResponse, HttpResponse
 from django.shortcuts import render, redirect
 from django.contrib import messages
 from django.utils import timezone
@@ -21,11 +23,23 @@ from django.contrib import messages
 from .forms import UserRegistrationForm, CustomLoginForm
 from django.shortcuts import render, get_object_or_404
 from .utils import parse_xml_dynamic  # if needed
-from urllib.parse import unquote_plus
+from urllib.parse import unquote_plus, quote
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
-from .models import ApplicationData, ServiceComponentData, XMLData
+from .models import (
+    ServerMetricsLive,
+    ServerMetricsHistory,
+    ServiceMetricsLive,
+    ServiceMetricsHistory,
+    ServiceComponentLive,
+    ServiceComponentHistory,
+    ApplicationDashboardLive,
+    ApplicationDashboardHistory,
+    ApplicationListLive,
+    ApplicationListHistory
+)
 from .utils import normalize_key
+import datetime
 
  # reuse your helper or copy it here
 
@@ -40,9 +54,9 @@ def get_color(value):
         v = float(str(value).replace('%', '').strip())
     except Exception:
         return 'green'
-    if v <= 50:
+    if v <= 65:
         return 'green'
-    elif v <= 75:
+    elif v <= 85:
         return 'yellow'
     else:
         return 'red'
@@ -105,7 +119,7 @@ def upload_view(request):
                 tmp_path = tmp.name
             data = parse_xml_dynamic(tmp_path)
 
-            XMLData.objects.create(
+            ServerMetricsHistory.objects.create(
                 file_name=filename,
                 data=data,
                 user=request.user,  # who uploaded it
@@ -138,12 +152,12 @@ def dashboard_view(request):
     # Admin can filter by any unit or see all
     if user_unit == 'Admin':
         if selected_unit and selected_unit != 'All':
-            xml_entries = XMLData.objects.filter(business_unit=selected_unit).order_by('-created_at')
+            xml_entries = ServerMetricsLive.objects.filter(business_unit=selected_unit).order_by('-updated_at')
         else:
-            xml_entries = XMLData.objects.all().order_by('-created_at')
+            xml_entries = ServerMetricsLive.objects.all().order_by('-updated_at')
     else:
         # Regular users can only see their own unit’s data
-        xml_entries = XMLData.objects.filter(business_unit=user_unit).order_by('-created_at')
+        xml_entries = ServerMetricsLive.objects.filter(business_unit=user_unit).order_by('-updated_at')
 
     # build servers data for template
     servers = []
@@ -166,7 +180,18 @@ def dashboard_view(request):
                     'usage': usage,
                     'color': get_color(usage)
                 })
-
+            contributor_list = server.get('TopMemoryProcesses', {}).get('Process', [])
+            if isinstance(contributor_list, dict):
+                contributor_list = [contributor_list]
+            top_3 = []
+            for contributor in contributor_list:
+                process_name = contributor.get('@Name', '')
+                process_used = contributor.get('@MemoryGB', '')
+                top_3.append({
+                    'process_name': process_name,
+                    'process_used': process_used,
+                })
+            print(top_3)
             servers.append({
                 # 'source_file': entry.file_name,
                 # 'uploaded_at': entry.created_at,
@@ -180,6 +205,7 @@ def dashboard_view(request):
                 'network_latency': server.get('Network_Latency'),
                 'last_boot': server.get('Last_Boot_Time'),
                 'disks': disk_list,
+                'top_memory_processes': top_3,
             })
     email = request.user.email
     pattern = "@[\w\.-]*"
@@ -199,24 +225,19 @@ def server_services_view(request, hostname):
 
     # choose entries visible to user
     if user_unit == 'Admin':
-        entries = ServiceComponentData.objects.all().order_by('-created_at')
+        entries = ServiceMetricsLive.objects.all().order_by('-updated_at')
     else:
-        entries = ServiceComponentData.objects.filter(business_unit=user_unit).order_by('-created_at')
-
+        entries = ServiceMetricsLive.objects.filter(business_unit=user_unit).order_by('-updated_at')
+    print(entries)
     svc_map = {}  # normalized_service_name -> {service_name, status, source_file, uploaded_at}
-
     for entry in entries:
         # prefer files that are service metrics (top tag contains "ServiceMetrics" or filename hints)
-        top = None
-        if isinstance(entry.data, dict):
-            top = list(entry.data.keys())[0] if entry.data else None
+        if not isinstance(entry.data, dict) or not entry.data:
+            continue
+        top = list(entry.data.keys())[0]
+        is_metrics = 'servicemetrics' in top.lower() or 'ServiceMetrics' in top
 
-        is_metrics = False
-        if top and 'ServiceMetrics' in top:
-            is_metrics = True
-        elif isinstance(entry.file_name, str) and 'servicemetrics' in entry.file_name.lower():
-            is_metrics = True
-        # skip non-metrics: they don't carry the simple service->status mapping
+
         if not is_metrics:
             continue
 
@@ -348,28 +369,21 @@ def service_details_view(request, hostname, service_name):
     user_unit = request.user.business_unit
 
     if user_unit == 'Admin':
-        entries = ServiceComponentData.objects.all().order_by('-created_at')
+        entries = ServiceComponentLive.objects.all().order_by('-updated_at')
     else:
-        entries = ServiceComponentData.objects.filter(business_unit=user_unit).order_by('-created_at')
+        entries = ServiceComponentLive.objects.filter(business_unit=user_unit).order_by('-updated_at')
 
     components = []
 
     for entry in entries:
         # Only look at ServiceComponent files (top tag or filename)
-        top = None
-        if isinstance(entry.data, dict):
-            top = list(entry.data.keys())[0] if entry.data else None
+        if not isinstance(entry.data, dict) or not entry.data:
+            continue
+        top = list(entry.data.keys())[0]
+        is_component_data = 'servicecomponent' in top.lower() or 'ServiceComponent' in top
 
-        is_component_file = False
-        if top and 'ServiceComponent' in top:
-            is_component_file = True
-        elif isinstance(entry.file_name, str) and 'servicecomponent' in entry.file_name.lower():
-            is_component_file = True
-        # also accept generic 'service' or files where associated_component exists
-        if not is_component_file:
-            # But still inspect if the parsed JSON seems to contain associated_component
-            # (some producers may not set root tag exactly)
-            pass
+        if not is_component_data:
+            continue
 
         # data root and Servers list
         data_root = entry.data.get(top) if (top and top in entry.data) else entry.data
@@ -404,12 +418,13 @@ def service_details_view(request, hostname, service_name):
                                     comp_status = comp.get('@status') or comp.get('status') or ''
                                     comp_url = comp.get('@url') or comp.get('url') or ''
                                     comp_log = (comp.get('@logFile') or comp.get('logfile') or '')
+                                    actual_service = comp.get('@actual_service_name') or comp.get('actual_service_name') or ''
                                     components.append({
                                         'component_name': comp_name,
                                         'status': comp_status,
                                         'url': comp_url,
                                         'logfile': comp_log,
-                                        'source_file': entry.file_name
+                                        'actual_service': actual_service
                                     })
                 continue
 
@@ -452,32 +467,41 @@ def service_details_view(request, hostname, service_name):
 
 
 @login_required
-def application_list_view(request):
+def application_dashboard_view(request):
     user_unit = request.user.business_unit
     if user_unit == 'Admin':
-        entries = ApplicationData.objects.all().order_by('-created_at')
+        entries = ApplicationDashboardLive.objects.all().order_by('-updated_at')
     else:
-        entries = ApplicationData.objects.filter(business_unit=user_unit).order_by('-created_at')
+        entries = ApplicationDashboardLive.objects.filter(business_unit=user_unit).order_by('-updated_at')
 
+    print(entries)
     applications = []
     for entry in entries:
-        data_root = entry.data.get('ApplicationList') or entry.data.get('Application') or entry.data
+        data_root = entry.data.get('ApplicationDashboard') or entry.data.get('Application') or entry.data
         apps = data_root.get('Application', []) if isinstance(data_root, dict) else []
         if isinstance(apps, dict):
             apps = [apps]
 
         for app in apps:
             name = app.get('Name') or app.get('@name') or ''
-            accessible = str(app.get('Accessible') or '')
-            response = app.get('ResponseTime') or ''
-            service_status = app.get('ServiceStatus') or ''
-            if name and service_status != "":
+            availability_uptime_percent = app.get('AvailabilityUptimePercent') or ''
+            response_time_ms = app.get('ResponseTimeMs') or ''
+            latency_ms = app.get('LatencyMs') or ''
+            throughput_rps = app.get('ThroughputRPS') or ''
+            database_query_latency_ms = app.get('DatabaseQueryLatencyMs') or ''
+            error_rate_percent = app.get('ErrorRatePercent') or ''
+            load_balancer_request_count = app.get('LoadBalancerRequestCount') or ''
+            if name:
                 applications.append({
                     'name': name.strip(),
-                    'accessible': accessible,
-                    'response_time': response,
-                    'service_status': service_status,
-                    'file': entry.file_name,
+                    'availability_uptime_percent': availability_uptime_percent,
+                    'response_time_ms': response_time_ms,
+                    'latency_ms': latency_ms,
+                    'throughput_rps': throughput_rps,
+                    'database_query_latency_ms': database_query_latency_ms,
+                    'error_rate_percent': error_rate_percent,
+                    'load_balancer_request_count': load_balancer_request_count,
+                    'file': entry.app_name,
                 })
     email = request.user.email
     pattern = "@[\w\.-]*"
@@ -492,9 +516,9 @@ def application_detail_view(request, app_name):
     user_unit = request.user.business_unit
 
     if user_unit == 'Admin':
-        entries = ApplicationData.objects.all().order_by('-created_at')
+        entries = ApplicationListLive.objects.all().order_by('-updated_at')
     else:
-        entries = ApplicationData.objects.filter(business_unit=user_unit).order_by('-created_at')
+        entries = ApplicationListLive.objects.filter(business_unit=user_unit).order_by('-updated_at')
 
     servers = []
     for entry in entries:
@@ -573,7 +597,7 @@ def metrics_data_api(request):
 
     # Filter by BU
     # choose the model where ServiceMetrics are stored; modify if you used ServiceComponentData
-    qs = XMLData.objects.filter(business_unit=user_unit).order_by('-created_at') if user_unit != 'Admin' else XMLData.objects.all().order_by('-created_at')
+    qs = ServerMetricsLive.objects.filter(business_unit=user_unit).order_by('-updated_at') if user_unit != 'Admin' else ServerMetricsLive.objects.all().order_by('-updated_at')
 
     # We'll collect up to `limit` samples (most recent first)
     labels = []     # timestamps string
@@ -619,7 +643,7 @@ def metrics_data_api(request):
 
 
             # record timestamp
-            ts = entry.created_at + timedelta(hours=5, minutes=30)
+            ts = entry.updated_at + timedelta(hours=5, minutes=30)
             labels.append(ts.strftime("%Y-%m-%d %H:%M:%S"))
             cpu_points.append(cpu if cpu is not None else None)
             ram_points.append(ram if ram is not None else None)
@@ -668,9 +692,9 @@ def metrics_data_api(request):
 def metrics_dashboard(request):
     user_unit = request.user.business_unit
     if user_unit == 'Admin':
-        entries = XMLData.objects.all().order_by('-created_at')
+        entries = ServerMetricsLive.objects.all().order_by('-updated_at')
     else:
-        entries = XMLData.objects.filter(business_unit=user_unit).order_by('-created_at')
+        entries = ServerMetricsLive.objects.filter(business_unit=user_unit).order_by('-updated_at')
 
     # get unique hostnames for dropdown
     hostnames = []
@@ -702,9 +726,9 @@ def metrics_data(request):
 
     # Filter only relevant XMLData entries
     if user_unit == 'Admin':
-        entries = XMLData.objects.all().order_by('-created_at')
+        entries = ServerMetricsLive.objects.all().order_by('-updated_at')
     else:
-        entries = XMLData.objects.filter(business_unit=user_unit).order_by('-created_at')
+        entries = ServerMetricsLive.objects.filter(business_unit=user_unit).order_by('-updated_at')
 
     labels, cpu, ram = [], [], []
     disk_labels, disk_values = [], []
@@ -734,7 +758,7 @@ def metrics_data(request):
                 if 'ram' in key.lower():
                     ram_val = float(str(value).replace('%', '').strip() or 0)
 
-            ts = entry.created_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%d %H:%M:%S')
+            ts = entry.updated_at.astimezone(timezone.get_current_timezone()).strftime('%Y-%m-%d %H:%M:%S')
             labels.append(ts)
             cpu.append(cpu_val or 0)
             ram.append(ram_val or 0)
@@ -780,13 +804,13 @@ def all_servers_plot(request):
         start_datetime = end_datetime = None
 
     if user_unit == 'Admin' and selected_bu and selected_bu == 'ALL':
-        entries = XMLData.objects.all().order_by('-created_at')
+        entries = ServerMetricsLive.objects.all().order_by('-updated_at')
     elif user_unit == 'Admin' and selected_bu and selected_bu != 'ALL':
-        entries = XMLData.objects.filter(business_unit=selected_bu).order_by('-created_at')
+        entries = ServerMetricsLive.objects.filter(business_unit=selected_bu).order_by('-updated_at')
     else:
-        entries = XMLData.objects.filter(business_unit=user_unit).order_by('-created_at')
+        entries = ServerMetricsLive.objects.filter(business_unit=user_unit).order_by('-updated_at')
     if start_datetime and end_datetime:
-        entries = entries.filter(created_at__range=[start_datetime, end_datetime])
+        entries = entries.filter(updated_at__range=[start_datetime, end_datetime])
 
 
     # Collect metrics
@@ -965,9 +989,14 @@ def all_servers_plot(request):
         })
 
 
-CPU_THRESHOLD = 80
-RAM_THRESHOLD = 80
-DISK_THRESHOLD = 80
+CPU_THRESHOLD_WARNING = 65
+RAM_THRESHOLD_WARNING = 65
+DISK_THRESHOLD_WARNING = 65
+
+CPU_THRESHOLD = 85
+RAM_THRESHOLD = 85
+DISK_THRESHOLD = 85
+
 Ticket_ID = 1000
 
 @login_required
@@ -975,9 +1004,10 @@ def check_threshold_view(request, server_name):
     global Ticket_ID
     user_unit = request.user.business_unit
     threshold_exceeded = []
+    ticket_needed = False
 
     # Get the latest entry for this BU
-    entries = XMLData.objects.filter(business_unit=user_unit).order_by('-created_at')
+    entries = ServerMetricsLive.objects.filter(business_unit=user_unit).order_by('-updated_at')
 
     if not entries.exists():
         messages.error(request, "No data available for this Business Unit.")
@@ -1024,18 +1054,26 @@ def check_threshold_view(request, server_name):
         disk_vals.append((drive, num))
 
     # Compare with thresholds
-    if cpu_val and cpu_val > CPU_THRESHOLD:
+    if cpu_val and cpu_val < CPU_THRESHOLD and cpu_val > CPU_THRESHOLD_WARNING:
+        threshold_exceeded.append(f"Warning: CPU usage {cpu_val}% nearing threshold of {CPU_THRESHOLD}%")
+    elif cpu_val and cpu_val > CPU_THRESHOLD:
         threshold_exceeded.append(f"CPU usage {cpu_val}% exceeded the threshold of {CPU_THRESHOLD}%")
-    if ram_val and ram_val > RAM_THRESHOLD:
+        ticket_needed = True
+    if ram_val and ram_val < RAM_THRESHOLD and ram_val > RAM_THRESHOLD_WARNING:
+        threshold_exceeded.append(f"Warning: RAM usage {ram_val}% nearing threshold of {RAM_THRESHOLD}%")
+    elif ram_val and ram_val > RAM_THRESHOLD:
         threshold_exceeded.append(f"RAM usage {ram_val}% exceeded the threshold of {RAM_THRESHOLD}%")
+        ticket_needed = True
 
     for drive, val in disk_vals:
-        if val > DISK_THRESHOLD:
+        if val > DISK_THRESHOLD_WARNING and val < DISK_THRESHOLD:
+            threshold_exceeded.append(f"Warning: Disk {drive} usage {val}% nearing the threshold of {DISK_THRESHOLD}%")
+        elif val > DISK_THRESHOLD:
             threshold_exceeded.append(f"Disk {drive} usage {val}% exceeded the threshold of {DISK_THRESHOLD}%")
-    print(request.user)
+            ticket_needed = True
     # Prepare the ticket file content
     ticket_text = []
-    if threshold_exceeded:
+    if threshold_exceeded and ticket_needed == True:
         ticket_text.append(f"Ticket ID - {Ticket_ID}\n")
         ticket_text.append(f"Affected User - {request.user}\n")
         ticket_text.append(f"Location - India\n")
@@ -1049,6 +1087,9 @@ def check_threshold_view(request, server_name):
         ticket_text.append("Urgency - 3 ( Low )\n")
         ticket_text.append(f"Assignment Group - L3_{user_unit}TeamcenterPLM_SysAdmin\n")
         ticket_text.append("\nAction: Immediate attention required.\n")
+    elif threshold_exceeded and ticket_needed == False:
+        for t in threshold_exceeded:
+            messages.warning(request,f"{t}\n")
     else:
         ticket_text.append(f"No threshold limit reached for Server: {server_name}\nAll parameters are normal.\n")
 
@@ -1059,12 +1100,14 @@ def check_threshold_view(request, server_name):
 
 
 
-    if threshold_exceeded:
+    if threshold_exceeded and ticket_needed == True:
         messages.warning(request, f"⚠️ Threshold exceeded! Ticket with ID: {Ticket_ID} created successfully at: \n{file_path}")
         Ticket_ID += 1
         with open(file_path, "w") as f:
             f.writelines(ticket_text)
-
+    elif threshold_exceeded and ticket_needed == False:
+        messages.warning(request, f"Threshold limit not exceeded but nearing for {server_name}. Hence no ticket created !!")
+        # send_email(request, hostname=name)
     else:
         messages.success(request, f"✅ No threshold limit reached for {server_name}. Hence no ticket created !!")
 
@@ -1142,3 +1185,69 @@ def check_threshold_view(request, server_name):
 #             "status": "normal",
 #             "message": f"No threshold limit reached for {server_name}."
 #         })
+
+
+
+# @login_required
+# def send_email(request, hostname):
+#     issues = [
+#         "CPU Reached"
+#         "RAM Reached"
+#         "Disk Reached"
+#     ]
+#
+#     to_email = "sanjay.vedhachalam@tcs.com"
+#
+#     subject = f"Threshold reached for {hostname}"
+#
+#     body_text = "Dear User, \n\n"
+#     body_text+= f"The following threshold are reached for {hostname}\n"
+#     for issue in issues:
+#         body_text += f"{issue}\n"
+#
+#     body_text += "\nRegards\n"
+#     body_text += "Support Team"
+#
+#     outlook_link = f"mailto:{to_email}?subject={quote(subject)}&body={quote(body_text)}"
+#
+#     return render(request, "threshold_result.html", {
+#         "hostname": hostname,
+#         "issues": issues,
+#         "outlook_link": outlook_link,
+#     })
+
+# from urllib.parse import quote as urlquote
+#
+# subject = "Threshold Alert"
+# body = "CPU Threshold reached for Server1. Value: 95%."
+# mailto_link = f"mailto:sanjay.vedhachalam@tcs.com?subject={urlquote(subject)}&body={urlquote(body)}"
+
+
+def download_ticket_email(request, hostname):
+    # Example ticket content
+    issues = request.GET.get("issues", "CPU exceeded threshold")
+    user = request.user.email
+
+    subject = f"Threshold Alert for {hostname}"
+    body = (
+        f"Dear Team,\n\n"
+        f"The following threshold issues were detected for server {hostname}:\n"
+        f"{issues}\n\n"
+        f"Generated by: {user}\n"
+        f"Timestamp: {datetime.datetime.now()}\n"
+        f"\nRegards,\nMonitoring System"
+    )
+
+    # Build .eml structure manually
+    eml_content = (
+        f"From: {user}\n"
+        f"To: \n"  # user fills this
+        f"Subject: {subject}\n"
+        f"Content-Type: text/plain; charset=UTF-8\n\n"
+        f"{body}"
+    )
+
+    response = HttpResponse(eml_content, content_type="message/rfc822")
+    response['Content-Disposition'] = f'attachment; filename="{hostname}_ticket.eml"'
+    return response
+

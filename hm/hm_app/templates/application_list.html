@@ -7,9 +7,13 @@
 <thead>
 <tr>
   <th>Name</th>
-  <th>Accessible</th>
-  <th>Response Time (ms)</th>
-  <th>Service Status</th>
+  <th>Availability Uptime Percent</th>
+  <th>Response Time Ms</th>
+  <th>Latency Ms</th>
+  <th>Throughput RPS</th>
+  <th>Database Query Latency Ms</th>
+  <th>Error Rate Percent</th>
+  <th>Load Balancer Request Count</th>
 </tr>
 </thead>
 <tbody>
@@ -20,9 +24,13 @@
       {{ app.name }}
     </a>
   </td>
-  <td>{{ app.accessible }}</td>
-  <td>{{ app.response_time }}</td>
-  <td>{{ app.service_status }}</td>
+  <td>{{ app.availability_uptime_percent }}</td>
+  <td>{{ app.response_time_ms }}</td>
+  <td>{{ app.latency_ms }}</td>
+  <td>{{ app.throughput_rps }}</td>
+  <td>{{ app.database_query_latency_ms }}</td>
+  <td>{{ app.error_rate_percent }}</td>
+  <td>{{ app.load_balancer_request_count }}</td>
 </tr>
 {% endfor %}
 </tbody>
