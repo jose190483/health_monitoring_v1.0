@@ -6,6 +6,7 @@ from typing import Any
 
 import matplotlib
 from django.conf import settings
+from fontTools.ttLib.tables.grUtils import entries
 
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
@@ -23,7 +24,7 @@ from django.contrib import messages
 from .forms import UserRegistrationForm, CustomLoginForm
 from django.shortcuts import render, get_object_or_404
 from .utils import parse_xml_dynamic  # if needed
-from urllib.parse import unquote_plus, quote
+from urllib.parse import unquote_plus, quote, unquote
 from django.contrib.auth.decorators import login_required
 from django.shortcuts import render
 from .models import (
@@ -48,18 +49,61 @@ logger = logging.getLogger(__name__)
 
 
 def get_color(value):
-    if not value:
+    if isinstance(value, list):
+        disk_colors = []
+        for d_value in value:
+            if "Free" in d_value:
+                d = re.search(r"(\d+\.\d+|\d+)GB", d_value)
+                if float(d.group(1)) > 25:
+                    disk_colors.append('green')
+                elif float(d.group(1)) <= 25 and float(d.group(1)) > 10:
+                    disk_colors.append('orange')
+                else:
+                    disk_colors.append('red')
+        diskspace_data = [
+            {"value": v, "colors": c}
+            for v,c in zip(value, disk_colors)
+        ]
+        return diskspace_data
+
+
+    # for string values
+    if value.lower() == "up" or value.lower() == "running" or value == "True":
+        return '#008000'
+    elif value.lower() == "down" or value.lower() == "stopped" or value == "False":
+        return 'red'
+    elif not value:
         return 'green'
+
     try:
-        v = float(str(value).replace('%', '').strip())
+        if "%" in value:
+            v = float(str(value).replace('%', '').strip())
+            if v <= 65:
+                return 'green'
+            elif v <= 85:
+                return 'yellow'
+            else:
+                return 'red'
+        if "MB" in value:
+            r = float(str(value).replace('MB', '').strip())
+            if r > 10000:
+                return 'green'
+            elif r <= 10000 and r > 6000:
+                return 'orange'
+            else:
+                return 'red'
+        if "Free" in value:
+            d = re.search(r"(\d+\.\d+|\d+)GB", value)
+            print(d.group(1))
+            if d.group(1) > 25:
+                return 'green'
+            elif d.group(1) <= 25 and d.group(1) > 10:
+                return 'orange'
+            else:
+                return 'red'
+
     except Exception:
         return 'green'
-    if v <= 65:
-        return 'green'
-    elif v <= 85:
-        return 'yellow'
-    else:
-        return 'red'
 
 
 def portal_home(request):
@@ -145,6 +189,11 @@ def upload_view(request):
     return render(request, 'portal_upload.html', {'form': form, 'name': name.upper(), 'business_unit': user_unit,})
 
 
+CPU_THRESHOLD = 85
+RAM_THRESHOLD = 85
+DISK_THRESHOLD = 85
+
+
 def dashboard_view(request):
     user_unit = request.user.business_unit
     selected_unit = request.GET.get('unit')  # from dropdown filter
@@ -191,13 +240,13 @@ def dashboard_view(request):
                     'process_name': process_name,
                     'process_used': process_used,
                 })
-            print(top_3)
             servers.append({
                 # 'source_file': entry.file_name,
                 # 'uploaded_at': entry.created_at,
                 'hostname': server.get('@Hostname'),
                 'ip': server.get('@IP'),
                 'status': server.get('@Status'),
+                'status_color': get_color(server.get('@Status')),
                 'cpu': server.get('CPU'),
                 'ram': server.get('RAM'),
                 'cpu_color': get_color(server.get('CPU')),
@@ -206,6 +255,9 @@ def dashboard_view(request):
                 'last_boot': server.get('Last_Boot_Time'),
                 'disks': disk_list,
                 'top_memory_processes': top_3,
+                'cpu_threshold': CPU_THRESHOLD,
+                'ram_threshold': RAM_THRESHOLD,
+                'disk_threshold': DISK_THRESHOLD,
             })
     email = request.user.email
     pattern = "@[\w\.-]*"
@@ -261,10 +313,21 @@ def server_services_view(request, hostname):
                     svc_name = value.get('@name') or value.get('name') or key
                     # if status appears as text (child text) or attribute
                     svc_status = value.get('#text') or value.get('@status') or value.get('status') or ''
+                    svc_lastchecked = value.get('#text') or value.get('@lastchecked') or value.get('lastchecked') or ''
+                    svc_responsetime = value.get('#text') or value.get('@responsetime') or value.get('responsetime') or ''
+                    svc_availability = value.get('#text') or value.get('@availability') or value.get('availability') or ''
+                    svc_errorrate = value.get('#text') or value.get('@errorrate') or value.get('errorrate') or ''
+                    svc_restartcount = value.get('#text') or value.get('@restartcount') or value.get('restartcount') or ''
                 else:
                     # plain text or string
                     svc_name = value if isinstance(value, str) else key
                     svc_status = ''  # no explicit status inside this type
+                    svc_lastchecked = ''
+                    svc_responsetime = ''
+                    svc_availability = ''
+                    svc_errorrate = ''
+                    svc_restartcount = ''
+
                 if not svc_name:
                     svc_name = key
 
@@ -274,6 +337,12 @@ def server_services_view(request, hostname):
                     svc_map[n] = {
                         'service_name': svc_name,
                         'status': svc_status,
+                        'status_color': get_color(svc_status),
+                        'lastchecked':svc_lastchecked,
+                        'responsetime':svc_responsetime,
+                        'availability':svc_availability,
+                        'errorrate':svc_errorrate,
+                        'restartcount':svc_restartcount,
                         # 'source_file': entry.file_name,
                         # 'uploaded_at': entry.created_at
                     }
@@ -484,6 +553,7 @@ def application_dashboard_view(request):
 
         for app in apps:
             name = app.get('Name') or app.get('@name') or ''
+            status = app.get('Status') or app.get('@status') or ''
             availability_uptime_percent = app.get('AvailabilityUptimePercent') or ''
             response_time_ms = app.get('ResponseTimeMs') or ''
             latency_ms = app.get('LatencyMs') or ''
@@ -494,6 +564,8 @@ def application_dashboard_view(request):
             if name:
                 applications.append({
                     'name': name.strip(),
+                    'status_color': get_color(status),
+                    'status': status,
                     'availability_uptime_percent': availability_uptime_percent,
                     'response_time_ms': response_time_ms,
                     'latency_ms': latency_ms,
@@ -510,10 +582,26 @@ def application_dashboard_view(request):
     return render(request, 'application_list.html', {'applications': applications, 'name': name.upper(), 'business_unit': user_unit,})
 
 
+def normalize_pool_group(app_name):
+    """
+    Detect GS/BGS pools and map to their base module (T4X) dynamically.
+    """
+    if "POOL_GS" in app_name or "POOL_BGS" in app_name:
+        # base_module = everything before GS/BGS + "_T4X"
+        # detect prefix (e.g., ABC_, XYZ_)
+        match = re.match(r"([A-Z0-9_]+)_POOL_", app_name)
+        if match:
+            prefix = match.group(1)
+            return f"{prefix}_POOL_T4X"
+    return app_name
+
+
 @login_required
 def application_detail_view(request, app_name):
     app_name = unquote_plus(app_name).strip()
     user_unit = request.user.business_unit
+
+    resolved_name = normalize_pool_group(app_name)
 
     if user_unit == 'Admin':
         entries = ApplicationListLive.objects.all().order_by('-updated_at')
@@ -521,6 +609,63 @@ def application_detail_view(request, app_name):
         entries = ApplicationListLive.objects.filter(business_unit=user_unit).order_by('-updated_at')
 
     servers = []
+    for entry in entries:
+        data_root = entry.data.get('ApplicationList') or entry.data.get('Application') or entry.data
+        apps = data_root.get('Application', []) if isinstance(data_root, dict) else []
+        if isinstance(apps, dict):
+            apps = [apps]
+
+        for app in apps:
+            name = app.get('@name') or app.get('Name')
+            if not name or name.strip().lower() != resolved_name.lower():
+                continue
+
+            srv_list = app.get('Server', [])
+            if isinstance(srv_list, dict):
+                srv_list = [srv_list]
+
+            for s in srv_list:
+                servers.append({
+                    'name': s.get('@name') or '',
+                    # 'env': s.get('@env') or '',
+                    'hostname': s.get('@hostname') or '',
+                    'cpu_color': get_color(s.get('@cpu') or ''),
+                    'cpu': s.get('@cpu') or '',
+                    'ram_color': get_color(s.get('@ram') or ''),
+                    'ram': s.get('@ram') or '',
+                    'diskspace_data': get_color((s.get('@diskspace').split(',') or '')),
+                    # 'diskspace': (s.get('@diskspace') or '').split(','),
+                    'pingstatus': s.get('@pingstatus') or '',
+                    'lastchecked': s.get('@lastchecked') or '',
+                    'status': s.get('@status') or '',
+                })
+
+    email = request.user.email
+    pattern = "@[\w\.-]*"
+    name = re.sub(pattern, ' ', email)
+
+    return render(request, 'application_detail.html', {
+        'app_name': app_name,
+        'servers': servers,
+        'name': name.upper(),
+        'business_unit': user_unit,
+    })
+
+
+
+@login_required
+def application_server_more_details(request, app_name, server_name):
+    server_name = unquote(server_name).strip()
+    app_name = unquote(app_name).strip()
+    user_unit = request.user.business_unit
+
+    if user_unit == 'Admin':
+        entries = ApplicationListLive.objects.all().order_by('-updated_at')
+    else:
+        entries = ApplicationListLive.objects.filter(business_unit=user_unit).order_by('-updated_at')
+
+    details = None
+
     for entry in entries:
         data_root = entry.data.get('ApplicationList') or entry.data.get('Application') or entry.data
         apps = data_root.get('Application', []) if isinstance(data_root, dict) else []
@@ -537,22 +682,31 @@ def application_detail_view(request, app_name):
                 srv_list = [srv_list]
 
             for s in srv_list:
-                servers.append({
-                    'type': s.get('@type') or '',
-                    'name': s.get('@name') or '',
-                    'status': s.get('@status') or '',
-                })
+                if (s.get('@name') or '').strip().lower() == server_name.lower():
+
+                    details = {
+                        'server_name': server_name,
+                        'ip': s.get('@ip') or '',
+                        'os': s.get('@os') or '',
+                        'os_version_build': s.get('@os_version_build') or '',
+                        'network': s.get('@network') or '',
+                        'remoteenabled': s.get('@remoteenabled') or '',
+                    }
+                    break
+
+    if not details:
+        messages.error(request, "Server details not found.")
+        return redirect('application_detail', app_name=app_name)
     email = request.user.email
     pattern = "@[\w\.-]*"
     name = re.sub(pattern, ' ', email)
 
-    return render(request, 'application_detail.html', {
-        'app_name': app_name,
-        'servers': servers,
+    return render(request, "application_more_detail.html", {
+        "app_name": app_name,
+        "details": details,
         'name': name.upper(),
         'business_unit': user_unit,
     })
-
 
 
 def _to_float(s):
@@ -796,10 +950,10 @@ def all_servers_plot(request):
     selected_bu = request.GET.get('bu')
 
     if start_date and end_date:
-        date_obj1 = datetime.strptime(start_date, "%Y-%m-%d").date()
-        date_obj2 = datetime.strptime(end_date, "%Y-%m-%d").date()
-        start_datetime = timezone.make_aware(datetime.combine(date_obj1, datetime.min.time()))
-        end_datetime = timezone.make_aware(datetime.combine(date_obj2, datetime.max.time()))
+        date_obj1 = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+        date_obj2 = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+        start_datetime = timezone.make_aware(datetime.datetime.combine(date_obj1, datetime.datetime.min.time()))
+        end_datetime = timezone.make_aware(datetime.datetime.combine(date_obj2, datetime.datetime.max.time()))
     else:
         start_datetime = end_datetime = None
 
@@ -876,11 +1030,11 @@ def all_servers_plot(request):
                         ha='center', va='bottom')
 
     if selected_metric == 'ALL' or selected_metric == '':
-        rects1 = ax.bar([i - width for i in x], cpu_vals, width, label='CPU (%)', color='skyblue')
-        rects2 = ax.bar(x, ram_vals, width, label='RAM (%)', color='salmon')
+        rects1 = ax.bar([i - width for i in x], cpu_vals, width, label='CPU (%)', color='magenta')
+        rects2 = ax.bar(x, ram_vals, width, label='RAM (%)', color='cyan')
 
         # plot each drive dynamically
-        color_cycle = ['mediumseagreen', 'orange', 'mediumpurple', 'gold', 'lightcoral']
+        color_cycle = ['tan', 'orange', 'mediumpurple', 'gold', 'lightcoral']
         for idx, (drive, values) in enumerate(disk_data.items()):
             offset = width * (idx + 1)
             color = color_cycle[idx % len(color_cycle)]
@@ -891,15 +1045,15 @@ def all_servers_plot(request):
         autolabel(rects2)
 
     elif selected_metric == 'CPU':
-        cpu_rects = ax.bar(x, cpu_vals, width, label='CPU (%)', color='skyblue')
+        cpu_rects = ax.bar(x, cpu_vals, width, label='CPU (%)', color='magenta')
         autolabel(cpu_rects)
 
     elif selected_metric == 'RAM':
-        ram_rects = ax.bar(x, ram_vals, width, label='RAM (%)', color='salmon')
+        ram_rects = ax.bar(x, ram_vals, width, label='RAM (%)', color='cyan')
         autolabel(ram_rects)
 
     else:
-        color_cycle = ['mediumseagreen', 'orange', 'mediumpurple', 'gold', 'lightcoral']
+        color_cycle = ['tan', 'orange', 'mediumpurple', 'gold', 'lightcoral']
         for idx, (drive, values) in enumerate(disk_data.items()):
             offset = width * (idx + 1)
             color = color_cycle[idx % len(color_cycle)]
@@ -1185,69 +1339,4 @@ def check_threshold_view(request, server_name):
 #             "status": "normal",
 #             "message": f"No threshold limit reached for {server_name}."
 #         })
-
-
-
-# @login_required
-# def send_email(request, hostname):
-#     issues = [
-#         "CPU Reached"
-#         "RAM Reached"
-#         "Disk Reached"
-#     ]
-#
-#     to_email = "sanjay.vedhachalam@tcs.com"
-#
-#     subject = f"Threshold reached for {hostname}"
-#
-#     body_text = "Dear User, \n\n"
-#     body_text+= f"The following threshold are reached for {hostname}\n"
-#     for issue in issues:
-#         body_text += f"{issue}\n"
-#
-#     body_text += "\nRegards\n"
-#     body_text += "Support Team"
-#
-#     outlook_link = f"mailto:{to_email}?subject={quote(subject)}&body={quote(body_text)}"
-#
-#     return render(request, "threshold_result.html", {
-#         "hostname": hostname,
-#         "issues": issues,
-#         "outlook_link": outlook_link,
-#     })
-
-# from urllib.parse import quote as urlquote
-#
-# subject = "Threshold Alert"
-# body = "CPU Threshold reached for Server1. Value: 95%."
-# mailto_link = f"mailto:sanjay.vedhachalam@tcs.com?subject={urlquote(subject)}&body={urlquote(body)}"
-
-
-def download_ticket_email(request, hostname):
-    # Example ticket content
-    issues = request.GET.get("issues", "CPU exceeded threshold")
-    user = request.user.email
-
-    subject = f"Threshold Alert for {hostname}"
-    body = (
-        f"Dear Team,\n\n"
-        f"The following threshold issues were detected for server {hostname}:\n"
-        f"{issues}\n\n"
-        f"Generated by: {user}\n"
-        f"Timestamp: {datetime.datetime.now()}\n"
-        f"\nRegards,\nMonitoring System"
-    )
-
-    # Build .eml structure manually
-    eml_content = (
-        f"From: {user}\n"
-        f"To: \n"  # user fills this
-        f"Subject: {subject}\n"
-        f"Content-Type: text/plain; charset=UTF-8\n\n"
-        f"{body}"
-    )
-
-    response = HttpResponse(eml_content, content_type="message/rfc822")
-    response['Content-Disposition'] = f'attachment; filename="{hostname}_ticket.eml"'
-    return response
 
